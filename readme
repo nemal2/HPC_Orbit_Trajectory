@@ -3,3 +3,8 @@ to run serial version
 >wsl
 >make 
 >./serial
+
+to run Open MP version
+>wsl
+>gcc -o rocket_openmp rocket_openmp.c rocket_physics.c rocket_utils.c -lm -fopenmp -O3
+>./rocket_openmp 4
