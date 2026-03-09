@@ -1,21 +1,39 @@
 #include "rocket_trajectory.h"
 #include <omp.h>
 
-TrajectoryResult find_best_trajectory_serial_test(ControlProfile *population, int size)
+TrajectoryResult find_best_trajectory_openmp(ControlProfile *population,
+                                             int size, int num_threads)
 {
     TrajectoryResult best;
     best.fitness = 1e9;
 
-    for (int i = 0; i < size; i++)
+    omp_set_num_threads(num_threads);
+
+#pragma omp parallel
     {
-        TrajectoryResult result = simulate_trajectory(&population[i], i);
-        calculate_fitness(&result);
+        int thread_id = omp_get_thread_num();
+        TrajectoryResult local_best;
+        local_best.fitness = 1e9;
 
-        if (result.fitness < best.fitness)
-            best = result;
+#pragma omp for
+        for (int i = 0; i < size; i++)
+        {
+            TrajectoryResult result = simulate_trajectory(&population[i], i);
+            calculate_fitness(&result);
 
-        if ((i + 1) % 100 == 0)
-            printf("Tested %d/%d trajectories\n", i + 1, size);
+            if (result.fitness < local_best.fitness)
+                local_best = result;
+        }
+
+#pragma omp critical
+        {
+            if (local_best.fitness < best.fitness)
+            {
+                best = local_best;
+                printf("Thread %d found better trajectory: fitness=%.2f\n",
+                       thread_id, local_best.fitness);
+            }
+        }
     }
 
     return best;
@@ -40,7 +58,7 @@ int main(int argc, char *argv[])
     printf("Population of %d trajectories initialized\n", POPULATION_SIZE);
 
     double start_time = omp_get_wtime();
-    TrajectoryResult best = find_best_trajectory_serial_test(population, POPULATION_SIZE);
+    TrajectoryResult best = find_best_trajectory_openmp(population, POPULATION_SIZE, num_threads);
     double exec_time = omp_get_wtime() - start_time;
 
     printf("\nBest trajectory ID: %d\n", best.trajectory_id);
