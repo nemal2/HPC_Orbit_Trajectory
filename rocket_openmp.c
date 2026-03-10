@@ -8,14 +8,18 @@ TrajectoryResult find_best_trajectory_openmp(ControlProfile *population,
     best.fitness = 1e9;
 
     omp_set_num_threads(num_threads);
+    printf("Using %d OpenMP threads\n", num_threads);
+    printf("Each thread will test ~%d trajectories\n\n", size / num_threads);
 
 #pragma omp parallel
     {
         int thread_id = omp_get_thread_num();
+        int local_count = 0;
         TrajectoryResult local_best;
         local_best.fitness = 1e9;
 
-#pragma omp for
+// CHANGED: Add dynamic scheduling for better load balancing
+#pragma omp for schedule(dynamic, 10)
         for (int i = 0; i < size; i++)
         {
             TrajectoryResult result = simulate_trajectory(&population[i], i);
@@ -23,6 +27,12 @@ TrajectoryResult find_best_trajectory_openmp(ControlProfile *population,
 
             if (result.fitness < local_best.fitness)
                 local_best = result;
+
+            local_count++;
+
+            // Progress reporting from thread 0
+            if (thread_id == 0 && local_count % 50 == 0)
+                printf("Thread 0: Processed ~%d chunks\n", local_count);
         }
 
 #pragma omp critical
@@ -30,7 +40,7 @@ TrajectoryResult find_best_trajectory_openmp(ControlProfile *population,
             if (local_best.fitness < best.fitness)
             {
                 best = local_best;
-                printf("Thread %d found better trajectory: fitness=%.2f\n",
+                printf("Thread %d found better trajectory: fitness=%.4f\n",
                        thread_id, local_best.fitness);
             }
         }
