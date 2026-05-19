@@ -1,19 +1,16 @@
 #include "rocket_trajectory.h"
 #include <omp.h>
 
-// Find best trajectory using parallel threads
 TrajectoryResult find_best_trajectory_openmp(ControlProfile *population,
                                              int size, int num_threads)
 {
     TrajectoryResult best;
     best.fitness = 1e9;
 
-    // Set the number of threads
     omp_set_num_threads(num_threads);
     printf("Using %d OpenMP threads\n", num_threads);
     printf("Each thread will test ~%d trajectories\n\n", size / num_threads);
 
-// Create the threads
 #pragma omp parallel
     {
         int thread_id = omp_get_thread_num();
@@ -21,7 +18,7 @@ TrajectoryResult find_best_trajectory_openmp(ControlProfile *population,
         TrajectoryResult local_best;
         local_best.fitness = 1e9;
 
-// Divide work among threads with dynamic scheduling
+// CHANGED: Add dynamic scheduling for better load balancing
 #pragma omp for schedule(dynamic, 10)
         for (int i = 0; i < size; i++)
         {
@@ -33,6 +30,7 @@ TrajectoryResult find_best_trajectory_openmp(ControlProfile *population,
 
             local_count++;
 
+            // Progress reporting from thread 0
             if (thread_id == 0 && local_count % 50 == 0)
                 printf("Thread 0: Processed ~%d chunks\n", local_count);
         }
@@ -65,13 +63,15 @@ int main(int argc, char *argv[])
 
     srand(FIXED_SEED);
 
-    printf("Initializing population of %d trajectories (seed=%d)\n",
+    printf("Initializing population of %d trajectories (seed=%d)...\n",
            POPULATION_SIZE, FIXED_SEED);
     ControlProfile *population = (ControlProfile *)malloc(POPULATION_SIZE * sizeof(ControlProfile));
     initialize_population(population, POPULATION_SIZE);
     printf("✓ Population initialized\n\n");
 
+    printf("========================================\n");
     printf("SIMULATION PARAMETERS\n");
+    printf("========================================\n");
     printf("Target Altitude:     %.0f km\n", TARGET_ALTITUDE / 1000.0);
     printf("Target Velocity:     %.0f m/s\n", TARGET_VELOCITY);
     printf("Population Size:     %d\n", POPULATION_SIZE);
@@ -86,16 +86,16 @@ int main(int argc, char *argv[])
     TrajectoryResult best = find_best_trajectory_openmp(population, POPULATION_SIZE, num_threads);
     double exec_time = omp_get_wtime() - start_time;
 
+    // FIX: print_result called once, outside parallel region → no garbled output
     print_result(&best, "BEST TRAJECTORY FOUND (OPENMP)");
 
-    printf("\n");
+    printf("\n========================================\n");
     printf("PERFORMANCE: OpenMP (%d threads)\n", num_threads);
-    printf("\n");
+    printf("========================================\n");
     printf("Execution Time:      %.3f seconds\n", exec_time);
     printf("Trajectories/second: %.1f\n", POPULATION_SIZE / exec_time);
-    printf("\n");
+    printf("========================================\n\n");
 
-    // Save to file
     TrajectoryResult results[1] = {best};
     save_results_to_file(results, 1, "results_openmp.csv");
 
