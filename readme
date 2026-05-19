@@ -8,3 +8,32 @@ to run Open MP version
 >wsl
 >gcc -o rocket_openmp rocket_openmp.c rocket_physics.c rocket_utils.c -lm -fopenmp -O3
 >./rocket_openmp 4
+
+to run full comparison without CUDA
+>wsl
+>make compare
+>mpirun -np 4 ./compare
+
+or
+>chmod +x run_compare_no_cuda.sh
+>./run_compare_no_cuda.sh 4
+
+to run full comparison with CUDA support
+>wsl or HPC CUDA node
+>make compare_cuda
+>mpirun -np 4 ./compare_cuda
+
+or
+>chmod +x run_compare_cuda.sh
+>./run_compare_cuda.sh 4
+
+If CUDA is not available, use ./compare. If ./compare_cuda is built but the
+computer has no CUDA GPU, the CUDA part is skipped automatically.
+
+automatic option
+>wsl or HPC node
+>chmod +x run_compare.sh
+>./run_compare.sh 4
+
+This script builds and runs compare_cuda when nvcc is available. Otherwise it
+builds and runs the normal compare program.
