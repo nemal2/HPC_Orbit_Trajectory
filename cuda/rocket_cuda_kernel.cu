@@ -2,6 +2,18 @@
 #include <cuda_runtime.h>
 #include "rocket_physics_cuda.cu"
 
+extern "C" int cuda_runtime_available_c(void)
+{
+    int device_count = 0;
+    cudaError_t err = cudaGetDeviceCount(&device_count);
+    if (err != cudaSuccess || device_count <= 0) {
+        cudaGetLastError();
+        return 0;
+    }
+
+    return 1;
+}
+
 __global__ void simulate_population(ControlProfile *population,
                                     TrajectoryResult *results,
                                     int size)
