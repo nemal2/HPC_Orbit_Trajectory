@@ -18,7 +18,7 @@ TrajectoryResult find_best_trajectory_openmp(ControlProfile *population,
         TrajectoryResult local_best;
         local_best.fitness = 1e9;
 
-// CHANGED: Add dynamic scheduling for better load balancing
+// Add dynamic scheduling for better load balancing
 #pragma omp for schedule(dynamic, 10)
         for (int i = 0; i < size; i++)
         {
@@ -86,7 +86,7 @@ int main(int argc, char *argv[])
     TrajectoryResult best = find_best_trajectory_openmp(population, POPULATION_SIZE, num_threads);
     double exec_time = omp_get_wtime() - start_time;
 
-    // FIX: print_result called once, outside parallel region → no garbled output
+    // print_result called once, outside parallel region → no garbled output
     print_result(&best, "BEST TRAJECTORY FOUND (OPENMP)");
 
     printf("\n========================================\n");
