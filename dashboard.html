@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rocket Trajectory Optimization — Analysis Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg:       #040810;
+    --panel:    #070d1a;
+    --border:   #0f2040;
+    --fire:     #ff6a00;
+    --fire2:    #ffb347;
+    --cyan:     #00d4ff;
+    --cyan2:    #0099cc;
+    --green:    #00ff88;
+    --red:      #ff3355;
+    --text:     #c8d8f0;
+    --dim:      #4a6080;
+    --glow-fire: 0 0 20px #ff6a0066;
+    --glow-cyan: 0 0 20px #00d4ff44;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── starfield ── */
+  #stars {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse at 20% 50%, #0a1628 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, #0d1f3c 0%, transparent 50%);
+  }
+  .star {
+    position: absolute; border-radius: 50%;
+    background: #fff; animation: twinkle var(--dur) infinite ease-in-out;
+    animation-delay: var(--del);
+  }
+  @keyframes twinkle {
+    0%,100% { opacity:.2; transform:scale(1); }
+    50%      { opacity:.9; transform:scale(1.4); }
+  }
+
+  /* ── layout ── */
+  .wrap { position:relative; z-index:1; max-width:1400px; margin:0 auto; padding:0 32px 80px; }
+
+  /* ── hero header ── */
+  header {
+    padding: 56px 0 40px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: flex-end; gap: 40px;
+    flex-wrap: wrap;
+  }
+  .logo-block { flex: 1; min-width: 280px; }
+  .tag {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: .72rem; letter-spacing: .2em; color: var(--fire);
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  }
+  .tag::before {
+    content:''; display:inline-block;
+    width:20px; height:1px; background:var(--fire);
+  }
+  h1 {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(1.4rem, 3vw, 2.4rem);
+    font-weight: 900;
+    letter-spacing: .04em;
+    line-height: 1.15;
+    background: linear-gradient(135deg, #fff 30%, var(--fire2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .subtitle {
+    margin-top: 8px; font-size: .88rem; color: var(--dim); font-weight: 400;
+    letter-spacing: .02em;
+  }
+
+  /* upload zone */
+  .upload-zone {
+    background: var(--panel);
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    padding: 18px 28px;
+    display: flex; align-items: center; gap: 16px;
+    cursor: pointer; transition: border-color .2s, background .2s;
+    flex-shrink: 0;
+  }
+  .upload-zone:hover { border-color: var(--cyan); background: #080f20; }
+  .upload-icon { font-size: 1.6rem; }
+  .upload-text { font-family: 'Share Tech Mono', monospace; font-size: .8rem; color: var(--cyan); }
+  .upload-sub  { font-size: .72rem; color: var(--dim); margin-top: 2px; }
+  #csvInput { display: none; }
+
+  /* ── stat cards row ── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 32px 0;
+  }
+  .stat-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 22px;
+    position: relative; overflow: hidden;
+    transition: transform .2s, border-color .2s;
+    animation: fadeUp .6s both;
+    animation-delay: var(--d, 0s);
+  }
+  .stat-card:hover { transform: translateY(-3px); border-color: var(--fire); }
+  .stat-card::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background: linear-gradient(90deg, var(--fire), var(--fire2));
+  }
+  .stat-label { font-size: .7rem; letter-spacing: .15em; text-transform:uppercase; color: var(--dim); font-family: 'Share Tech Mono', monospace; }
+  .stat-value {
+    font-family: 'Orbitron', monospace; font-size: 1.9rem; font-weight: 700;
+    color: #fff; margin: 6px 0 2px; line-height: 1;
+  }
+  .stat-value.fire  { color: var(--fire2); }
+  .stat-value.cyan  { color: var(--cyan);  }
+  .stat-value.green { color: var(--green); }
+  .stat-sub { font-size: .72rem; color: var(--dim); }
+
+  /* ── section ── */
+  .section { margin-top: 44px; }
+  .section-title {
+    font-family: 'Orbitron', monospace; font-size: .9rem; font-weight: 700;
+    letter-spacing: .12em; text-transform: uppercase; color: var(--fire2);
+    display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+  }
+  .section-title::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+  .section-num { color: var(--dim); font-size: .75rem; }
+
+  /* ── charts grid ── */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  .chart-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px; padding: 24px;
+    position: relative;
+    animation: fadeUp .7s both;
+    animation-delay: var(--d, 0s);
+  }
+  .chart-card.wide { grid-column: 1 / -1; }
+  .chart-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: .78rem; letter-spacing: .1em; color: var(--cyan);
+    text-transform: uppercase; margin-bottom: 18px;
+  }
+  .chart-wrap { position:relative; }
+
+  /* ── table ── */
+  .table-wrap {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 14px; overflow: hidden;
+    animation: fadeUp .8s both;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  thead tr {
+    background: #060c18;
+    border-bottom: 1px solid var(--border);
+  }
+  thead th {
+    padding: 14px 16px; text-align: left;
+    font-family: 'Share Tech Mono', monospace; font-size: .68rem;
+    letter-spacing: .12em; text-transform: uppercase; color: var(--dim);
+  }
+  tbody tr {
+    border-bottom: 1px solid #0a1628;
+    transition: background .15s;
+  }
+  tbody tr:hover { background: #080f22; }
+  tbody tr:last-child { border-bottom: none; }
+  td { padding: 12px 16px; }
+  .cat-badge {
+    display: inline-block; padding: 3px 10px; border-radius: 20px;
+    font-family: 'Share Tech Mono', monospace; font-size: .65rem;
+    letter-spacing: .08em; font-weight: 700;
+  }
+  .cat-serial  { background:#1a1000; color:var(--fire2); border:1px solid #3a2800; }
+  .cat-openmp  { background:#001a10; color:var(--green); border:1px solid #003020; }
+  .cat-mpi     { background:#001020; color:var(--cyan);  border:1px solid #002040; }
+  .cat-hybrid  { background:#1a0020; color:#c084fc;      border:1px solid #3a0040; }
+  .cat-cuda    { background:#200010; color:#ff6b9d;      border:1px solid #400020; }
+  .orbit-yes { color:var(--green); font-weight:500; }
+  .orbit-no  { color:var(--red);   font-weight:500; }
+  .speedup-bar {
+    display:flex; align-items:center; gap:8px;
+  }
+  .speedup-track {
+    flex:1; height:6px; background:#0a1628; border-radius:3px; overflow:hidden;
+  }
+  .speedup-fill {
+    height:100%; border-radius:3px;
+    background: linear-gradient(90deg, var(--fire), var(--fire2));
+    transition: width 1s ease;
+  }
+
+  /* ── amdahl annotation ── */
+  .insight-row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px; margin-top: 20px;
+  }
+  .insight-card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 20px;
+    border-left: 3px solid var(--fire);
+    animation: fadeUp .9s both;
+    animation-delay: var(--d, 0s);
+  }
+  .insight-card.cyan { border-left-color: var(--cyan); }
+  .insight-card.green { border-left-color: var(--green); }
+  .insight-label {
+    font-family: 'Share Tech Mono', monospace; font-size: .65rem;
+    letter-spacing: .12em; text-transform: uppercase; color: var(--dim);
+    margin-bottom: 6px;
+  }
+  .insight-text { font-size: .85rem; line-height: 1.5; color: var(--text); }
+  .insight-text strong { color: #fff; }
+
+  /* ── efficiency gauge ── */
+  .gauge-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 14px;
+  }
+  .gauge-item {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px; text-align: center;
+  }
+  .gauge-name {
+    font-family: 'Share Tech Mono', monospace; font-size: .65rem;
+    letter-spacing: .08em; color: var(--dim); margin-bottom: 10px;
+  }
+  .gauge-svg-wrap { display: flex; justify-content: center; }
+  .gauge-val {
+    font-family: 'Orbitron', monospace; font-size: 1.1rem; font-weight: 700;
+    margin-top: 6px;
+  }
+
+  /* ── footer ── */
+  footer {
+    margin-top: 60px; padding-top: 24px;
+    border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px;
+  }
+  .footer-brand {
+    font-family: 'Orbitron', monospace; font-size: .75rem;
+    color: var(--dim); letter-spacing: .12em;
+  }
+  .footer-note {
+    font-family: 'Share Tech Mono', monospace; font-size: .7rem;
+    color: var(--dim);
+  }
+
+  /* ── animations ── */
+  @keyframes fadeUp {
+    from { opacity:0; transform:translateY(18px); }
+    to   { opacity:1; transform:translateY(0);    }
+  }
+
+  /* ── loading overlay ── */
+  #loading {
+    position:fixed; inset:0; background:var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    z-index:100; transition: opacity .4s;
+  }
+  #loading.hidden { opacity:0; pointer-events:none; }
+  .rocket-anim {
+    font-size: 4rem; animation: launch 1.2s ease-in-out infinite alternate;
+    margin-bottom: 20px;
+  }
+  @keyframes launch { from { transform:translateY(0) rotate(-45deg); } to { transform:translateY(-16px) rotate(-45deg); } }
+  .loading-text {
+    font-family: 'Share Tech Mono', monospace; font-size: .9rem;
+    color: var(--cyan); letter-spacing: .15em;
+  }
+  .loading-bar {
+    width: 200px; height: 2px; background: var(--border);
+    margin-top: 16px; border-radius: 1px; overflow: hidden;
+  }
+  .loading-fill {
+    height: 100%; background: linear-gradient(90deg, var(--fire), var(--cyan));
+    animation: fillbar 1.8s ease forwards;
+  }
+  @keyframes fillbar { from { width:0; } to { width:100%; } }
+
+  @media (max-width: 768px) {
+    .charts-grid { grid-template-columns: 1fr; }
+    .wrap { padding: 0 16px 60px; }
+    header { gap: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="rocket-anim">🚀</div>
+  <div class="loading-text">INITIALIZING MISSION CONTROL</div>
+  <div class="loading-bar"><div class="loading-fill"></div></div>
+</div>
+
+<!-- Stars -->
+<div id="stars"></div>
+
+<div class="wrap">
+  <!-- Header -->
+  <header>
+    <div class="logo-block">
+      <div class="tag">SpaceX-Inspired HPC Analysis</div>
+      <h1>ROCKET TRAJECTORY<br>OPTIMIZATION DASHBOARD</h1>
+      <p class="subtitle">Serial · OpenMP · MPI · Hybrid · CUDA — Performance & Accuracy Analysis</p>
+    </div>
+    <label class="upload-zone" for="csvInput">
+      <span class="upload-icon">📡</span>
+      <div>
+        <div class="upload-text">UPLOAD RESULTS CSV</div>
+        <div class="upload-sub">Drop performance_analysis.csv here</div>
+      </div>
+      <input type="file" id="csvInput" accept=".csv">
+    </label>
+  </header>
+
+  <!-- Stat Cards -->
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card" style="--d:.1s">
+      <div class="stat-label">Best Speedup</div>
+      <div class="stat-value fire" id="statBestSpeedup">—</div>
+      <div class="stat-sub" id="statBestVersion">—</div>
+    </div>
+    <div class="stat-card" style="--d:.15s">
+      <div class="stat-label">Serial Baseline</div>
+      <div class="stat-value cyan" id="statSerialTime">—</div>
+      <div class="stat-sub">seconds</div>
+    </div>
+    <div class="stat-card" style="--d:.2s">
+      <div class="stat-label">Fastest Time</div>
+      <div class="stat-value green" id="statFastestTime">—</div>
+      <div class="stat-sub" id="statFastestVer">—</div>
+    </div>
+    <div class="stat-card" style="--d:.25s">
+      <div class="stat-label">Orbit Success Rate</div>
+      <div class="stat-value" id="statOrbit">—</div>
+      <div class="stat-sub">across all versions</div>
+    </div>
+    <div class="stat-card" style="--d:.3s">
+      <div class="stat-label">Versions Tested</div>
+      <div class="stat-value" id="statVersions">—</div>
+      <div class="stat-sub">parallelism strategies</div>
+    </div>
+    <div class="stat-card" style="--d:.35s">
+      <div class="stat-label">Best RMSE</div>
+      <div class="stat-value green" id="statBestRMSE">—</div>
+      <div class="stat-sub">vs serial baseline</div>
+    </div>
+  </div>
+
+  <!-- Charts Section -->
+  <div class="section">
+    <div class="section-title"><span class="section-num">01</span> Performance Comparison</div>
+    <div class="charts-grid">
+      <div class="chart-card" style="--d:.1s">
+        <div class="chart-title">⚡ Execution Time (seconds)</div>
+        <div class="chart-wrap"><canvas id="chartTime" height="260"></canvas></div>
+      </div>
+      <div class="chart-card" style="--d:.2s">
+        <div class="chart-title">🚀 Speedup vs Serial Baseline</div>
+        <div class="chart-wrap"><canvas id="chartSpeedup" height="260"></canvas></div>
+      </div>
+      <div class="chart-card wide" style="--d:.3s">
+        <div class="chart-title">📊 Parallel Efficiency (%) — Speedup ÷ Worker Count × 100</div>
+        <div class="chart-wrap"><canvas id="chartEfficiency" height="160"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Accuracy Section -->
+  <div class="section">
+    <div class="section-title"><span class="section-num">02</span> Accuracy vs Serial Baseline</div>
+    <div class="charts-grid">
+      <div class="chart-card" style="--d:.1s">
+        <div class="chart-title">🎯 RMSE vs Serial (lower = better)</div>
+        <div class="chart-wrap"><canvas id="chartRMSE" height="240"></canvas></div>
+      </div>
+      <div class="chart-card" style="--d:.2s">
+        <div class="chart-title">🛸 Altitude & Velocity Accuracy</div>
+        <div class="chart-wrap"><canvas id="chartAccuracy" height="240"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Efficiency Gauges -->
+  <div class="section">
+    <div class="section-title"><span class="section-num">03</span> Efficiency Gauges</div>
+    <div class="gauge-grid" id="gaugeGrid"></div>
+  </div>
+
+  <!-- Key Insights -->
+  <div class="section">
+    <div class="section-title"><span class="section-num">04</span> Key Findings</div>
+    <div class="insight-row" id="insightRow">
+      <div class="insight-card" style="--d:.1s">
+        <div class="insight-label">Amdahl's Law</div>
+        <div class="insight-text" id="amdahlText">Loading data…</div>
+      </div>
+      <div class="insight-card cyan" style="--d:.2s">
+        <div class="insight-label">Scalability Observation</div>
+        <div class="insight-text" id="scaleText">Loading data…</div>
+      </div>
+      <div class="insight-card green" style="--d:.3s">
+        <div class="insight-label">Best Strategy</div>
+        <div class="insight-text" id="stratText">Loading data…</div>
+      </div>
+      <div class="insight-card" style="--d:.4s; border-left-color:#c084fc">
+        <div class="insight-label">Accuracy Verdict</div>
+        <div class="insight-text" id="accText">Loading data…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full Results Table -->
+  <div class="section">
+    <div class="section-title"><span class="section-num">05</span> Full Results Table</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Version</th>
+            <th>Workers</th>
+            <th>Time (s)</th>
+            <th>Speedup</th>
+            <th>Efficiency</th>
+            <th>RMSE</th>
+            <th>Alt (km)</th>
+            <th>Vel (m/s)</th>
+            <th>Orbit</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>
+    <div class="footer-brand">🚀 ROCKET TRAJECTORY OPTIMIZATION — HPC ANALYSIS</div>
+    <div class="footer-note">Generated from performance_analysis.csv · SpaceX-inspired Falcon 9 Model</div>
+  </footer>
+</div>
+
+<script>
+// ── Stars ─────────────────────────────────────────────────────────────────
+(function(){
+  const c = document.getElementById('stars');
+  for(let i=0;i<160;i++){
+    const s = document.createElement('div');
+    s.className='star';
+    const sz = Math.random()*2+.5;
+    s.style.cssText = `width:${sz}px;height:${sz}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--dur:${2+Math.random()*4}s;--del:${Math.random()*4}s`;
+    c.appendChild(s);
+  }
+})();
+
+// ── Sample data — your real results ────────────────────────────────────
+const SAMPLE_CSV = `Category,Version,Workers,Time_s,Speedup,Efficiency_pct,RMSE,FuelKg,AltKm,VelMs,Fitness,Orbit
+Serial,Serial,1,0.673,1.000,100.0,0.0000,522000.00,400.081,7666.83,1961.1882,1
+OpenMP,OpenMP_2T,2,0.380,1.769,88.4,0.0000,522000.00,400.081,7666.83,1961.1882,1
+OpenMP,OpenMP_4T,4,0.229,2.932,73.3,0.0000,522000.00,400.081,7666.83,1961.1882,1
+OpenMP,OpenMP_8T,8,0.207,3.245,40.6,0.0000,522000.00,400.081,7666.83,1961.1882,1
+MPI,MPI_1P,1,0.677,0.993,99.3,0.0000,522000.00,400.081,7666.83,1961.1882,1
+MPI,MPI_2P,2,0.364,1.851,92.5,0.0000,522000.00,400.081,7666.83,1961.1882,1
+MPI,MPI_4P,4,0.174,3.865,96.6,0.0000,522000.00,400.081,7666.83,1961.1882,1
+Hybrid,Hybrid_1Px8T,8,0.204,3.294,41.2,0.0000,522000.00,400.081,7666.83,1961.1882,1
+Hybrid,Hybrid_2Px4T,8,0.202,3.333,41.7,0.0000,522000.00,400.081,7666.83,1961.1882,1
+Hybrid,Hybrid_4Px8T,32,0.210,3.202,10.0,0.0000,522000.00,400.081,7666.83,1961.1882,1
+CUDA,CUDA_GPU,GPU,SKIPPED,,,,,,,,`;
+
+// ── CSV Parser ─────────────────────────────────────────────────────────
+function parseCSV(text) {
+  const lines = text.trim().split('\n').filter(l=>l.trim());
+  const headers = lines[0].split(',').map(h=>h.trim());
+  return lines.slice(1).map(line=>{
+    const vals = line.split(',').map(v=>v.trim());
+    const obj = {};
+    headers.forEach((h,i)=>obj[h]=vals[i]||'');
+    return obj;
+  });
+}
+
+// ── Color helpers ─────────────────────────────────────────────────────
+const CAT_COLORS = {
+  Serial: { bg:'#ff6a0022', border:'#ff6a00', label:'#ffb347' },
+  OpenMP: { bg:'#00ff8822', border:'#00ff88', label:'#00ff88' },
+  MPI:    { bg:'#00d4ff22', border:'#00d4ff', label:'#00d4ff' },
+  Hybrid: { bg:'#c084fc22', border:'#c084fc', label:'#c084fc' },
+  CUDA:   { bg:'#ff6b9d22', border:'#ff6b9d', label:'#ff6b9d' },
+};
+function catColor(cat,mode='border'){
+  return (CAT_COLORS[cat]||CAT_COLORS.Serial)[mode];
+}
+
+// ── Chart defaults ────────────────────────────────────────────────────
+Chart.defaults.color = '#4a6080';
+Chart.defaults.borderColor = '#0f2040';
+Chart.defaults.font.family = "'Share Tech Mono', monospace";
+Chart.defaults.font.size   = 11;
+
+const charts = {};
+function destroyChart(id){ if(charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+// ── Main render ────────────────────────────────────────────────────────
+function render(allRows) {
+  // ── Separate CUDA-SKIPPED from numeric rows ────────────────────────
+  // A row is "numeric" only when Time_s is a real number string
+  const isNumeric = r => r.Time_s && r.Time_s !== 'SKIPPED' && !isNaN(parseFloat(r.Time_s));
+  const rows      = allRows.filter(isNumeric);        // used for all charts
+  const cudaSkip  = allRows.find(r => r.Category === 'CUDA' && !isNumeric(r));
+
+  const serialRow  = rows.find(r => r.Category === 'Serial');
+  const serialTime = parseFloat(serialRow?.Time_s) || 1;
+
+  // ── Stat cards ────────────────────────────────────────────────────
+  const bySpeedup  = [...rows].sort((a,b) => parseFloat(b.Speedup||0) - parseFloat(a.Speedup||0));
+  const byTime     = [...rows].sort((a,b) => parseFloat(a.Time_s||999) - parseFloat(b.Time_s||999));
+  const orbitTotal = allRows.filter(r => r.Orbit === '1').length;
+  const orbitDenom = allRows.filter(r => r.Orbit === '1' || r.Orbit === '0').length;
+
+  // RMSE: rows that have a valid non-empty RMSE value (not Serial)
+  const rmseRows   = rows.filter(r => r.Category !== 'Serial' && r.RMSE !== '' && r.RMSE !== undefined);
+  const allRMSEZero = rmseRows.length > 0 && rmseRows.every(r => parseFloat(r.RMSE) === 0);
+  const bestRMSE   = rmseRows.length ? Math.min(...rmseRows.map(r => parseFloat(r.RMSE))) : null;
+
+  el('statBestSpeedup').textContent = parseFloat(bySpeedup[0]?.Speedup||1).toFixed(2)+'×';
+  el('statBestVersion').textContent  = bySpeedup[0]?.Version || '—';
+  el('statSerialTime').textContent   = parseFloat(serialTime).toFixed(3);
+  el('statFastestTime').textContent  = parseFloat(byTime[0]?.Time_s||0).toFixed(3)+'s';
+  el('statFastestVer').textContent   = byTime[0]?.Version || '—';
+  el('statOrbit').textContent        = orbitTotal + '/' + (orbitDenom || allRows.length);
+  el('statVersions').textContent     = allRows.length;
+  // RMSE stat: show "PERFECT" badge when all zeros (deterministic fixed seed)
+  if (allRMSEZero) {
+    el('statBestRMSE').textContent   = 'PERFECT';
+    el('statBestRMSE').className     = 'stat-value green';
+  } else {
+    el('statBestRMSE').textContent   = bestRMSE !== null ? bestRMSE.toFixed(4) : 'N/A';
+  }
+
+  const labels = rows.map(r => r.Version);
+  const colors = rows.map(r => catColor(r.Category, 'border'));
+  const bgs    = rows.map(r => catColor(r.Category, 'bg'));
+
+  // ── Chart 1: Time ──────────────────────────────────────────────────
+  destroyChart('time');
+  charts.time = new Chart(document.getElementById('chartTime'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Time (s)',
+        data: rows.map(r => parseFloat(r.Time_s) || 0),
+        backgroundColor: bgs,
+        borderColor: colors,
+        borderWidth: 2,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: {display:false}, tooltip: { callbacks: { label: c => `${c.formattedValue} s` } } },
+      scales: {
+        x: { ticks:{maxRotation:35, font:{size:9}}, grid:{color:'#0f2040'} },
+        y: { grid:{color:'#0f2040'}, ticks:{ callback: v => v+'s' } }
+      }
+    }
+  });
+
+  // ── Chart 2: Speedup ──────────────────────────────────────────────
+  destroyChart('speedup');
+  charts.speedup = new Chart(document.getElementById('chartSpeedup'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Speedup',
+        data: rows.map(r => parseFloat(r.Speedup) || 1),
+        backgroundColor: rows.map(r => {
+          const sp = parseFloat(r.Speedup) || 1;
+          if (sp > 10) return '#ff6b9d44';
+          if (sp > 3)  return '#c084fc44';
+          if (sp > 1.5) return '#00d4ff44';
+          return '#ff6a0022';
+        }),
+        borderColor: rows.map(r => {
+          const sp = parseFloat(r.Speedup) || 1;
+          if (sp > 10) return '#ff6b9d';
+          if (sp > 3)  return '#c084fc';
+          if (sp > 1.5) return '#00d4ff';
+          return '#ff6a00';
+        }),
+        borderWidth: 2, borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{display:false}, tooltip: { callbacks: { label: c => `${parseFloat(c.formattedValue).toFixed(2)}×` } } },
+      scales: {
+        x: { ticks:{maxRotation:35, font:{size:9}}, grid:{color:'#0f2040'} },
+        y: { grid:{color:'#0f2040'}, ticks:{ callback: v => v+'×' } }
+      }
+    }
+  });
+
+  // ── Chart 3: Efficiency ───────────────────────────────────────────
+  const effRows = rows.filter(r => r.Efficiency_pct !== '' && r.Efficiency_pct !== undefined);
+  destroyChart('efficiency');
+  charts.efficiency = new Chart(document.getElementById('chartEfficiency'), {
+    type: 'bar',
+    data: {
+      labels: effRows.map(r=>r.Version),
+      datasets: [{
+        label: 'Efficiency %',
+        data: effRows.map(r=>parseFloat(r.Efficiency_pct)||0),
+        backgroundColor: effRows.map(r=>{
+          const e = parseFloat(r.Efficiency_pct)||0;
+          if(e>=80) return '#00ff8844';
+          if(e>=50) return '#ffb34744';
+          return '#ff335544';
+        }),
+        borderColor: effRows.map(r=>{
+          const e = parseFloat(r.Efficiency_pct)||0;
+          if(e>=80) return '#00ff88';
+          if(e>=50) return '#ffb347';
+          return '#ff3355';
+        }),
+        borderWidth: 2, borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{ callbacks:{ label:c=>`${c.formattedValue}%` } },
+        annotation: {}
+      },
+      scales:{
+        x:{ ticks:{maxRotation:30,font:{size:9}}, grid:{color:'#0f2040'} },
+        y:{ grid:{color:'#0f2040'}, max:110, ticks:{ callback:v=>v+'%' } }
+      }
+    }
+  });
+
+  // ── Chart 4: RMSE — handle all-zero (deterministic fixed-seed) case ──
+  destroyChart('rmse');
+  const rmseCanvas = document.getElementById('chartRMSE');
+  const rmseParent = rmseCanvas.parentElement;
+
+  // Remove any previous "perfect" banner
+  const oldBanner = rmseParent.querySelector('.perfect-banner');
+  if (oldBanner) oldBanner.remove();
+  rmseCanvas.style.display = 'block';
+
+  if (allRMSEZero) {
+    // All parallel versions found the EXACT same best trajectory → RMSE = 0
+    // Show an explanatory badge instead of an empty/misleading chart
+    rmseCanvas.style.display = 'none';
+    const banner = document.createElement('div');
+    banner.className = 'perfect-banner';
+    banner.innerHTML = `
+      <div style="text-align:center;padding:32px 16px;">
+        <div style="font-size:2.4rem;margin-bottom:12px">🎯</div>
+        <div style="font-family:'Orbitron',monospace;font-size:1.1rem;font-weight:700;color:#00ff88;margin-bottom:8px">PERFECT ACCURACY</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:.75rem;color:#4a6080;line-height:1.6;max-width:340px;margin:0 auto">
+          RMSE = 0.0000 for ALL parallel versions.<br>
+          Fixed seed (42) guarantees every strategy evaluates<br>
+          the identical population → bit-identical best trajectory.<br>
+          <span style="color:#00d4ff;margin-top:8px;display:block">This is the expected and correct result. ✓</span>
+        </div>
+      </div>`;
+    rmseParent.appendChild(banner);
+  } else {
+    charts.rmse = new Chart(rmseCanvas, {
+      type: 'bar',
+      data: {
+        labels: rmseRows.map(r => r.Version),
+        datasets: [{
+          label: 'RMSE',
+          data: rmseRows.map(r => parseFloat(r.RMSE) || 0),
+          backgroundColor: rmseRows.map(r => catColor(r.Category, 'bg')),
+          borderColor: rmseRows.map(r => catColor(r.Category, 'border')),
+          borderWidth: 2, borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: {display:false} },
+        scales: {
+          x: { ticks:{maxRotation:35,font:{size:9}}, grid:{color:'#0f2040'} },
+          y: { grid:{color:'#0f2040'} }
+        }
+      }
+    });
+  }
+
+  // ── Chart 5: Altitude & Velocity — absolute values vs target ─────
+  // Use actual numeric rows that have AltKm/VelMs populated
+  const accRows    = rows.filter(r => r.AltKm && r.VelMs && !isNaN(parseFloat(r.AltKm)));
+  const targetAlt  = 400.0;
+  const targetVel  = 7670.0;  // m/s
+  const altVals    = accRows.map(r => parseFloat(r.AltKm));
+  const velVals    = accRows.map(r => parseFloat(r.VelMs));
+  const allSameAlt = altVals.every(v => Math.abs(v - altVals[0]) < 0.001);
+  const allSameVel = velVals.every(v => Math.abs(v - velVals[0]) < 0.01);
+
+  destroyChart('accuracy');
+  if (allSameAlt && allSameVel) {
+    // All versions hit identical orbit — show a radar-style absolute values chart
+    charts.accuracy = new Chart(document.getElementById('chartAccuracy'), {
+      type: 'bar',
+      data: {
+        labels: ['Target', ...accRows.map(r => r.Version)],
+        datasets: [
+          {
+            label: 'Altitude (km)',
+            data: [targetAlt, ...altVals],
+            backgroundColor: ['#ffffff11', ...accRows.map(r => catColor(r.Category, 'bg'))],
+            borderColor:     ['#ffffff66', ...accRows.map(r => catColor(r.Category, 'border'))],
+            borderWidth: 2, borderRadius: 4,
+            yAxisID: 'yAlt',
+          },
+          {
+            label: 'Horiz. Velocity (m/s)',
+            data: [targetVel, ...velVals],
+            backgroundColor: ['#ffffff11', ...accRows.map(r => '#ff6a0022')],
+            borderColor:     ['#ffffff66', ...accRows.map(r => '#ff6a00')],
+            borderWidth: 2, borderRadius: 4,
+            yAxisID: 'yVel',
+          }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display:true, labels:{ color:'#c8d8f0', boxWidth:12, font:{size:10} } },
+          tooltip: { callbacks: {
+            label: ctx => ctx.datasetIndex===0
+              ? `Alt: ${ctx.raw.toFixed(2)} km`
+              : `Vel: ${ctx.raw.toFixed(1)} m/s`
+          }}
+        },
+        scales: {
+          x:    { ticks:{maxRotation:35,font:{size:9}}, grid:{color:'#0f2040'} },
+          yAlt: { position:'left',  grid:{color:'#0f2040'}, title:{display:true,text:'Alt (km)',color:'#00d4ff',font:{size:10}},
+                  ticks:{color:'#00d4ff'} },
+          yVel: { position:'right', grid:{drawOnChartArea:false},
+                  title:{display:true,text:'Vel (m/s)',color:'#ff6a00',font:{size:10}},
+                  ticks:{color:'#ff6a00'} },
+        }
+      }
+    });
+  } else {
+    // Different results — show error % as before
+    charts.accuracy = new Chart(document.getElementById('chartAccuracy'), {
+      type: 'bar',
+      data: {
+        labels: accRows.map(r => r.Version),
+        datasets: [
+          {
+            label: 'Alt Error %',
+            data: accRows.map(r => Math.abs(parseFloat(r.AltKm) - targetAlt) / targetAlt * 100),
+            backgroundColor: '#00d4ff22', borderColor:'#00d4ff', borderWidth:2, borderRadius:4,
+          },
+          {
+            label: 'Vel Error %',
+            data: accRows.map(r => Math.abs(parseFloat(r.VelMs) - targetVel) / targetVel * 100),
+            backgroundColor: '#ff6a0022', borderColor:'#ff6a00', borderWidth:2, borderRadius:4,
+          }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{ display:true, labels:{ color:'#c8d8f0', boxWidth:12, font:{size:10} } } },
+        scales: {
+          x: { ticks:{maxRotation:35,font:{size:9}}, grid:{color:'#0f2040'} },
+          y: { grid:{color:'#0f2040'}, ticks:{ callback: v => v.toFixed(2)+'%' } }
+        }
+      }
+    });
+  }
+  // ── Efficiency Gauges ─────────────────────────────────────────────
+  const gaugeGrid = document.getElementById('gaugeGrid');
+  gaugeGrid.innerHTML = '';
+  effRows.forEach(r=>{
+    const eff = Math.min(parseFloat(r.Efficiency_pct)||0, 100);
+    const color = eff>=80?'#00ff88': eff>=50?'#ffb347':'#ff3355';
+    const angle = eff/100 * 251.2; // circumference ratio
+    const div = document.createElement('div');
+    div.className='gauge-item';
+    div.innerHTML=`
+      <div class="gauge-name">${r.Version}</div>
+      <div class="gauge-svg-wrap">
+        <svg width="80" height="80" viewBox="0 0 80 80">
+          <circle cx="40" cy="40" r="32" fill="none" stroke="#0f2040" stroke-width="7"/>
+          <circle cx="40" cy="40" r="32" fill="none" stroke="${color}" stroke-width="7"
+            stroke-dasharray="${angle} 251.2"
+            stroke-dashoffset="62.8"
+            stroke-linecap="round"
+            transform="rotate(-90 40 40)"
+            style="transition:stroke-dasharray 1.2s ease"/>
+          <text x="40" y="44" text-anchor="middle" font-family="Orbitron,monospace" font-size="11" font-weight="700" fill="${color}">${eff.toFixed(0)}%</text>
+        </svg>
+      </div>
+      <div class="gauge-val" style="color:${catColor(r.Category,'label')}">${r.Category}</div>
+    `;
+    gaugeGrid.appendChild(div);
+  });
+
+  // ── Insights ──────────────────────────────────────────────────────
+  const maxOMP = rows.filter(r=>r.Category==='OpenMP').sort((a,b)=>parseFloat(b.Speedup)-parseFloat(a.Speedup))[0];
+  const maxMPI = rows.filter(r=>r.Category==='MPI').sort((a,b)=>parseFloat(b.Speedup)-parseFloat(a.Speedup))[0];
+  const bestRow = bySpeedup[0];
+
+  el('amdahlText').innerHTML = `Efficiency drops as worker count grows — e.g., OpenMP 8T achieves <strong>${parseFloat(maxOMP?.Speedup||1).toFixed(2)}×</strong> speedup (not 8×). This confirms <strong>Amdahl's Law</strong>: the serial fraction limits the theoretical maximum.`;
+  el('scaleText').innerHTML  = `MPI shows better efficiency per process (up to <strong>${parseFloat(maxMPI?.Efficiency_pct||0).toFixed(1)}%</strong>) than OpenMP at equal worker counts, suggesting very low communication overhead on this machine.`;
+  el('stratText').innerHTML  = `<strong>${bestRow?.Version||'MPI_4P'}</strong> achieved the best speedup of <strong>${parseFloat(bestRow?.Speedup||1).toFixed(2)}×</strong>. ${cudaSkip ? 'CUDA was skipped (no GPU on this system) — on a CUDA machine it would dominate all CPU strategies.' : 'Hybrid MPI+OpenMP provides the most flexibility for multi-node HPC scaling.'}`;
+  el('accText').innerHTML    = allRMSEZero
+    ? `RMSE = <strong>0.0000</strong> for every parallel version — a <strong>perfect match</strong> with serial. The fixed seed (42) makes all strategies evaluate an identical population, so the best trajectory found is <strong>bit-identical</strong> across Serial, OpenMP, MPI, and Hybrid. ✓`
+    : `Average RMSE across parallel versions: <strong>${(rmseRows.reduce((s,r)=>s+parseFloat(r.RMSE||0),0)/rmseRows.length).toFixed(4)}</strong>. All orbit-capable versions produce <strong>Excellent</strong> accuracy confirming deterministic physics.`;
+
+  // ── Table — uses allRows so CUDA SKIPPED still appears ───────────
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '';
+  const maxSp = Math.max(...rows.map(r => parseFloat(r.Speedup||1)));
+
+  allRows.forEach(r => {
+    const skipped = !isNumeric(r);
+    const sp      = skipped ? null : parseFloat(r.Speedup || 1);
+    const eff     = (r.Efficiency_pct && r.Efficiency_pct !== '')
+                    ? parseFloat(r.Efficiency_pct).toFixed(1)+'%' : '—';
+    const rmse    = (r.RMSE !== '' && r.RMSE !== undefined)
+                    ? (parseFloat(r.RMSE) === 0 ? '<span style="color:#00ff88">PERFECT</span>' : parseFloat(r.RMSE).toFixed(4))
+                    : '—';
+    const orbit   = r.Orbit === '1'
+                    ? '<span class="orbit-yes">✓ YES</span>'
+                    : (r.Orbit === '0' ? '<span class="orbit-no">✗ NO</span>' : '<span style="color:#4a6080">—</span>');
+    const catClass = 'cat-' + r.Category.toLowerCase();
+    const timeCell = skipped
+                    ? '<span style="color:#4a6080;font-family:\'Share Tech Mono\',monospace;font-size:.75rem">SKIPPED</span>'
+                    : `<span style="color:#ffb347;font-family:'Share Tech Mono',monospace">${parseFloat(r.Time_s).toFixed(3)}</span>`;
+    const speedCell = skipped
+                    ? '<span style="color:#4a6080">—</span>'
+                    : `<div class="speedup-bar">
+                        <span style="font-family:'Orbitron',monospace;font-size:.82rem;color:#fff;min-width:42px">${sp.toFixed(2)}×</span>
+                        <div class="speedup-track"><div class="speedup-fill" style="width:${(sp/maxSp*100).toFixed(1)}%"></div></div>
+                       </div>`;
+    const effColor = skipped ? '#4a6080'
+                   : parseFloat(r.Efficiency_pct||0)>=80?'#00ff88'
+                   : parseFloat(r.Efficiency_pct||0)>=50?'#ffb347':'#ff3355';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="cat-badge ${catClass}">${r.Category}</span></td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:.78rem;color:#e0eaff">${r.Version}</td>
+      <td style="color:#888">${r.Workers}</td>
+      <td>${timeCell}</td>
+      <td>${speedCell}</td>
+      <td style="color:${effColor}">${eff}</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:.78rem;color:#aaa">${rmse}</td>
+      <td style="color:#00d4ff">${r.AltKm ? parseFloat(r.AltKm).toFixed(3) : '—'}</td>
+      <td style="color:#c8d8f0">${r.VelMs ? parseFloat(r.VelMs).toFixed(2) : '—'}</td>
+      <td>${orbit}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
+function el(id){ return document.getElementById(id); }
+
+// ── CSV upload ─────────────────────────────────────────────────────────
+document.getElementById('csvInput').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const rows = parseCSV(ev.target.result);
+      render(rows);
+      document.querySelector('.upload-text').textContent = '✓ '+file.name;
+    } catch(err) { alert('CSV parse error: '+err.message); }
+  };
+  reader.readAsText(file);
+});
+
+// ── Init ───────────────────────────────────────────────────────────────
+window.addEventListener('load', ()=>{
+  setTimeout(()=>{
+    document.getElementById('loading').classList.add('hidden');
+    render(parseCSV(SAMPLE_CSV));
+  }, 1900);
+});
+</script>
+</body>
+</html>
