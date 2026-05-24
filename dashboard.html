@@ -913,13 +913,52 @@ document.getElementById('csvInput').addEventListener('change', function(e){
   reader.readAsText(file);
 });
 
+window.addEventListener('load', async () => {
+
+  setTimeout(async () => {
+
+    document.getElementById('loading').classList.add('hidden');
+
+    try {
+
+      const response = await fetch('./performance_analysis.csv');
+
+      if (!response.ok) {
+        throw new Error('performance_analysis.csv not found');
+      }
+
+      const csvText = await response.text();
+
+      const rows = parseCSV(csvText);
+
+      render(rows);
+
+      const uploadText = document.querySelector('.upload-text');
+
+      if (uploadText) {
+        uploadText.textContent =
+          '✓ Auto-loaded performance_analysis.csv';
+      }
+
+    }
+    catch (err)
+    {
+      console.log('Auto-load failed. Using SAMPLE_CSV instead.');
+
+      render(parseCSV(SAMPLE_CSV));
+    }
+
+  }, 1900);
+
+});
+
 // ── Init ───────────────────────────────────────────────────────────────
-window.addEventListener('load', ()=>{
+/*window.addEventListener('load', ()=>{
   setTimeout(()=>{
     document.getElementById('loading').classList.add('hidden');
     render(parseCSV(SAMPLE_CSV));
   }, 1900);
-});
+});*/
 </script>
 </body>
 </html>
